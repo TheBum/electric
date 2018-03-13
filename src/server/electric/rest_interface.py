@@ -311,6 +311,8 @@ class RFIDTagReadResource(Resource):
             return comms.stop_tag_reading()
         elif command == "kill reading":
             return comms.kill_tag_reading()
+        elif command == "register cycle":
+            return comms.register_cycle()
 
 class RFIDTagWriteResource(Resource):
     def get(self):
