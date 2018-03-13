@@ -12,6 +12,9 @@ WORKDIR /www
 ENV MAKEFLAGS="-j 4"
 
 RUN pip install -r requirements-all.txt \
+    && git clone https://github.com/pimylifeup/MFRC522-python.git \
+    && cp MFRC522-python/MFRC522.py /www/electric/worker/ \
+    && rm -Rf MFRC522-python \
     && rm -rf /www/scripts /www/MANIFEST /www/requirements*.txt /www/old-setup /www/DEVELOPMENT.md /www/pypirc_template /www/setup.py \
     && chmod +x /www/run_gunicorn.sh \
     && chmod +x /www/run_zmq_worker.sh \
