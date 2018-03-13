@@ -399,8 +399,11 @@ class TagWriter(threading.Thread):
             if schema != None:
                 if not writable:
                     self.status = RFIDTagOpStatus.ReadOnlyTag
-                    self.loop_done = True
-                    break
+                    LEDControl.flash(6, period=0.167, color1=LEDColor.Red)
+                    # Lets keep going in case the wrong tag was touched
+                    #self.loop_done = true
+                    #break
+                    continue
                 if not self.force:
                     batt_dict = tio.read_tag(schema)
                     # Capacity should be 0 on a virgin tag
