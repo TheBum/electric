@@ -250,6 +250,9 @@ class ZMQCommsManager(object):
     def stop_tag_reading(self):
         return self._send_message_get_response("stop_tag_reading")
     
+    def register_cycle(self):
+        return self._send_message_get_response("register cycle")
+    
     def get_tag_list(self):
         return self._send_message_get_response("get_tag_list")
     
