@@ -75,6 +75,8 @@ def route_message(charger, method, args):
         return TagReader.instance().start()
     elif method == "stop_tag_reading":
         return TagReader.instance().stop()
+    elif method == "register_cycle":
+        return TagReader.instance().register_cycle()
     elif method == "get_tag_list":
         return TagReader.get_tag_list()
     elif method == "kill_tag_reading":
