@@ -247,10 +247,8 @@ class TagReader(threading.Thread):
 
     def start(self):
         global lone_thread
-        if self.loop_done:
-            self.exit()
-            return self.instance().start()
-        elif not self.is_alive():
+        # Ignore when in any state except Ready
+        if self.status == RFIDTagOpStatus.Ready:
             # Read the cycled batteries file into a list for performance reasons
             cycled_batts = []
             try:
@@ -370,8 +368,11 @@ class TagReader(threading.Thread):
         return { "status":self.status }
 
     def register_cycle(self):
-        if self.tags.tag_list.to_native() == []:
-            return { "status":"No tags to register" }
+        # Only allow cycles to be registered if the reader is stopped
+        if self.status != RFIDTagOpStatus.Stopped:
+            return { "status":self.status }
+        elif self.tags.tag_list.to_native() == []:
+            return { "status":RFIDTagOpStatus.Success }
         
         cycled_batts = []
         new_cycles = False
