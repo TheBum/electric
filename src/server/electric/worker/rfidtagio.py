@@ -363,11 +363,10 @@ class TagReader(threading.Thread):
             try:
                 with open(self.cycled_file_base + '.dat', 'r') as fr:
                     for line in fr:
-                        found_tag_line = True
+                        found_tag_line = False
                         for tag in self.tags.tag_list:
-                            tag_line = \
-                               fw.write("{0}, {1}\n".format(tag["battery_id"], \
-                                                            tag["tag_uid"]))
+                            tag_line = "{0}, {1}\n".format(tag["battery_id"], \
+                                                           tag["tag_uid"]))
                             if line == tag_line:
                                 found_tag_line = True
                                 break
