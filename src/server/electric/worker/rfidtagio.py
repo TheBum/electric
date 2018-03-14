@@ -223,7 +223,7 @@ class TagIO:
         self.last_trailer_block = None        
 
 class TagReader(threading.Thread):
-    cycled_file_path = '/opt/cycled_batteries'
+    cycled_file_path = '/opt/cycled_batteries.dat'
 
     @staticmethod
     def instance():
