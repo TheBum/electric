@@ -6,6 +6,7 @@ import threading
 import time
 import logging
 import copy
+import shutil
 import MFRC522
 from Queue import Queue
 import RPi.GPIO as GPIO
@@ -137,9 +138,10 @@ class TagIO:
         "trailer_block =",trailer_block,"last =",self.last_trailer_block
         if trailer_block != self.last_trailer_block:
             self.read_writer.MFRC522_StopCrypto1()
-            status = self.read_writer.MFRC522_Auth(self.read_writer.PICC_AUTHENT1A, \
-                                                  block, \
-                                                  self.AUTH_KEY, self.tag_uid)
+            status = \
+                self.read_writer.MFRC522_Auth(self.read_writer.PICC_AUTHENT1A, \
+                                              block, \
+                                              self.AUTH_KEY, self.tag_uid)
             if status != self.read_writer.MI_OK:
                 return None
             else:
@@ -221,6 +223,8 @@ class TagIO:
         self.last_trailer_block = None        
 
 class TagReader(threading.Thread):
+    cycled_file_base = '/opt/cycled_batteries'
+
     @staticmethod
     def instance():
         global lone_thread
@@ -267,12 +271,31 @@ class TagReader(threading.Thread):
                 batt_dict = tio.read_tag(schema)
                 if batt_dict != None and writable:
                     # Increment cycle count if needed
-                    if False:# If the battery has been cycled since the last bump:
-                        batt_dict[tio.CYCLES_KEY] += 1
-                        new_batt_dict = tio.write_tag(schema, batt_dict)
-                        if new_batt_dict != None:
-                            batt_dict = new_batt_dict
-                            # Reset the "cycled" flag for this battery
+                    tag_line = "{0}, {1}\n".format(batt_dict["battery_id"], \
+                                                   uid)
+                    try:
+                        with open(self.cycled_file_base + '.dat', 'r') as fr, \
+                             open(self.cycled_file_base + '.new', 'w') as fw:
+                            for line in fr:
+                                print "line =", line
+                                print "tag_line =", tag_line
+                                if line == tag_line:
+                                    # Increment the cycle count
+                                    batt_dict[tio.CYCLES_KEY] += 1
+                                    new_batt_dict = tio.write_tag(schema, \
+                                                                  batt_dict)
+                                    if new_batt_dict != None:
+                                        batt_dict = new_batt_dict
+                                else:
+                                    # Propagate the tag to the new file
+                                    fw.write(line)
+
+                            fr.close()
+                            fw.close()
+                            shutil.move(self.cycled_file_base + '.new', \
+                                        self.cycled_file_base + '.dat')
+                    except:
+                        pass
             else:
                 print "Invalid tag type: ", type
                 continue
@@ -332,6 +355,31 @@ class TagReader(threading.Thread):
         LEDControl.set_color(LEDControl.Off)
         return { "status":self.status }
 
+    def register_cycle(self):
+        with open(self.cycled_file_base + '.new', 'w') as fw:
+            for tag in self.tags.tag_list:
+                fw.write("{0}, {1}\n".format(tag["battery_id"], \
+                                             tag["tag_uid"]))
+            try:
+                with open(self.cycled_file_base + '.dat', 'r') as fr:
+                    for line in fr:
+                        found_tag_line = True
+                        for tag in self.tags.tag_list:
+                            tag_line = \
+                               fw.write("{0}, {1}\n".format(tag["battery_id"], \
+                                                            tag["tag_uid"]))
+                            if line == tag_line:
+                                found_tag_line = True
+                                break
+                        if not found_tag_line:
+                            fw.write(line)
+            except:
+                pass
+                
+            fw.close()
+            shutil.move(self.cycled_file_base + '.new', \
+                        self.cycled_file_base + '.dat')
+            
     @classmethod
     def get_tag_list(cls):
         if lone_thread != None \
