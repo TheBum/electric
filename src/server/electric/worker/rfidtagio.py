@@ -6,7 +6,7 @@ import threading
 import time
 import logging
 import copy
-import shutil
+import errno
 import MFRC522
 from Queue import Queue
 import RPi.GPIO as GPIO
@@ -223,7 +223,7 @@ class TagIO:
         self.last_trailer_block = None        
 
 class TagReader(threading.Thread):
-    cycled_file_base = '/opt/cycled_batteries'
+    cycled_file_path = '/opt/cycled_batteries'
 
     @staticmethod
     def instance():
@@ -251,6 +251,17 @@ class TagReader(threading.Thread):
             self.exit()
             return self.instance().start()
         elif not self.is_alive():
+            # Read the cycled batteries file into a list for performance reasons
+            cycled_batts = []
+            try:
+                with open(self.cycled_file_path) as f:
+                    for line in f:
+                        cycled_batts.append(line)
+            except IOError as e:
+                # If the file is missing, it's not an error
+                if e.errno != errno.ENOENT:
+                    return { "status":e.strerror }
+                
             super(TagReader, self).start()
             self.status = RFIDTagOpStatus.Running
             LEDControl.set_color(LEDControl.Green)
@@ -259,7 +270,10 @@ class TagReader(threading.Thread):
     def run(self):
         prev_uid = None
         tio = TagIO()
+        cycled_batts = []
+        
         while not self.loop_done:
+            cycle_recorded = False
             tio.reset()
             (type, uid) = tio.detect_tag()
             if uid == None or uid == prev_uid:
@@ -273,29 +287,21 @@ class TagReader(threading.Thread):
                     # Increment cycle count if needed
                     tag_line = "{0}, {1}\n".format(batt_dict["battery_id"], \
                                                    uid)
-                    try:
-                        with open(self.cycled_file_base + '.dat', 'r') as fr, \
-                             open(self.cycled_file_base + '.new', 'w') as fw:
-                            for line in fr:
-                                print "line =", line
-                                print "tag_line =", tag_line
-                                if line == tag_line:
-                                    # Increment the cycle count
-                                    batt_dict[tio.CYCLES_KEY] += 1
-                                    new_batt_dict = tio.write_tag(schema, \
-                                                                  batt_dict)
-                                    if new_batt_dict != None:
-                                        batt_dict = new_batt_dict
-                                else:
-                                    # Propagate the tag to the new file
-                                    fw.write(line)
+                    for line in cycled_batts:
+                        print "line =", line
+                        print "tag_line =", tag_line
+                        if line == tag_line:
+                            # Increment the cycle count
+                            batt_dict[tio.CYCLES_KEY] += 1
+                            new_batt_dict = tio.write_tag(schema, batt_dict)
+                            if new_batt_dict != None:
+                                batt_dict = new_batt_dict
+                                    
+                            # We're done recording the cycle, so
+                            # remove it from the list
+                            cycled_batts.remove(line)
+                            cycle_recorded = True
 
-                            fr.close()
-                            fw.close()
-                            shutil.move(self.cycled_file_base + '.new', \
-                                        self.cycled_file_base + '.dat')
-                    except:
-                        pass
             else:
                 print "Invalid tag type: ", type
                 continue
@@ -346,6 +352,14 @@ class TagReader(threading.Thread):
                 # We'll flash at a little faster rate for anyone who is
                 # colorblind
                 LEDControl.flash(6, period=0.167, color1=LEDControl.Red)
+                
+            if cycle_recorded:
+                try:
+                    with open(self.cycled_file_path, 'w') as f:
+                        for line in cycled_batts:
+                            f.write(line)
+                except:
+                    print "Failed writing cycled_batteries file!"
         
     def stop(self):
         if self.is_alive():
@@ -356,28 +370,46 @@ class TagReader(threading.Thread):
         return { "status":self.status }
 
     def register_cycle(self):
-        with open(self.cycled_file_base + '.new', 'w') as fw:
-            for tag in self.tags.tag_list:
-                fw.write("{0}, {1}\n".format(tag["battery_id"], \
-                                             tag["tag_uid"]))
+        if self.tags.tag_list.to_native() == []:
+            return { "status":"No tags to register" }
+        
+        cycled_batts = []
+        new_cycles = False
+        
+        # Load the list of cycled batteries awaiting cycle count
+        # updating from file
+        try:
+            with open(self.cycled_file_path) as f:
+                for line in f:
+                    cycled_batts.append(line)
+        except IOError as e:
+            # If the file is missing, it's not an error
+            if e.errno != errno.ENOENT:
+                return { "status":e.strerror }
+        
+        # Append the current set of scanned batteries to the list
+        for tag in self.tags.tag_list:
+            tag_line = "{0}, {1}\n".format(tag["battery_id"], \
+                                           tag["tag_uid"])
+            already_registered = False
+            for line in cycled_batts:
+                if line == tag_line:
+                    already_registered = True
+                    break
+            if not already_registered:
+                cycled_batts.append(tag_line)
+                new_cycles = True
+        
+        # If the list changed, update the file
+        if new_cycles:
             try:
-                with open(self.cycled_file_base + '.dat', 'r') as fr:
-                    for line in fr:
-                        found_tag_line = False
-                        for tag in self.tags.tag_list:
-                            tag_line = "{0}, {1}\n".format(tag["battery_id"], \
-                                                           tag["tag_uid"]))
-                            if line == tag_line:
-                                found_tag_line = True
-                                break
-                        if not found_tag_line:
-                            fw.write(line)
-            except:
-                pass
-                
-            fw.close()
-            shutil.move(self.cycled_file_base + '.new', \
-                        self.cycled_file_base + '.dat')
+                with open(self.cycled_file_path, 'w') as f:
+                    for line in cycled_batts:
+                        f.write(line)
+            except IOError as e:
+                return { "status":e.strerror }
+        
+        return { "status":RFIDTagOpStatus.Success }
             
     @classmethod
     def get_tag_list(cls):
