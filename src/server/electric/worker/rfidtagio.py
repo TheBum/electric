@@ -62,6 +62,10 @@ class LEDControl:
             time.sleep(period / 2)
             cls.set_color(color1)
         cls.set_color(saved_color)
+    
+    @classmethod
+    def cleanup(cls):
+        GPIO.cleanup((16, 20))
 
 class TagIO:
     RCT_TAG  = 0x08     # MIFARE 1K
@@ -91,10 +95,13 @@ class TagIO:
                          DISCHARGE_RATE_KEY:( 5, 3 ) } }
     REVO_SCHEMA = {}
 
+    num_instances = 0
+    
     def __init__(self):
         self.read_writer = MFRC522.MFRC522()
         self.tag_uid = None
         self.last_trailer_block = None
+        TagIO.num_instances += 1
 
     def detect_tag(self):
         time.sleep(0.5)
@@ -223,6 +230,11 @@ class TagIO:
         self.read_writer.MFRC522_StopCrypto1()
         self.last_trailer_block = None        
 
+    def __del__(self):
+        TagIO.num_instances -= 1
+        if TagIO.num_instances == 0:
+            GPIO.cleanup((MFRC522.MFRC522.NRSTPD))
+        
 class TagReader(threading.Thread):
     cycled_file_path = '/opt/cycled_batteries.dat'
 
@@ -358,13 +370,13 @@ class TagReader(threading.Thread):
                             f.write(line)
                 except:
                     print "Failed writing cycled_batteries file!"
+        LEDControl.cleanup()  # Cleans up the GPIO pins
         
     def stop(self):
         if self.is_alive():
             self.loop_done = True
             self.join()
         self.status = RFIDTagOpStatus.Stopped
-        LEDControl.set_color(LEDControl.Off)
         return { "status":self.status }
 
     def register_cycle(self):
@@ -509,8 +521,7 @@ class TagWriter(threading.Thread):
                 LEDControl.flash(4)
             self.loop_done = True
         self.status = RFIDTagOpStatus.Stopped
-        LEDControl.set_color(LEDControl.Off)
-        return { "status":self.status }
+        LEDControl.cleanup()  # Cleans up the GPIO pins
 
     @classmethod
     def get_status(cls):
