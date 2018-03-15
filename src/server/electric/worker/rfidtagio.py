@@ -219,7 +219,8 @@ class TagIO:
         return self.read_tag(schema)
 
     def reset(self):
-        self.read_writer.MFRC522_Init()
+        #self.read_writer.MFRC522_Init()
+        self.read_writer.MFRC522_StopCrypto1()
         self.last_trailer_block = None        
 
 class TagReader(threading.Thread):
@@ -250,11 +251,11 @@ class TagReader(threading.Thread):
         # Ignore when in any state except Ready
         if self.status == RFIDTagOpStatus.Ready:
             # Read the cycled batteries file into a list for performance reasons
-            cycled_batts = []
+            self.cycled_batts = []
             try:
                 with open(self.cycled_file_path) as f:
                     for line in f:
-                        cycled_batts.append(line)
+                        self.cycled_batts.append(line)
             except IOError as e:
                 # If the file is missing, it's not an error
                 if e.errno != errno.ENOENT:
@@ -268,7 +269,6 @@ class TagReader(threading.Thread):
     def run(self):
         prev_uid = None
         tio = TagIO()
-        cycled_batts = []
         
         while not self.loop_done:
             cycle_recorded = False
@@ -285,7 +285,7 @@ class TagReader(threading.Thread):
                     # Increment cycle count if needed
                     tag_line = "{0}, {1}\n".format(batt_dict["battery_id"], \
                                                    uid)
-                    for line in cycled_batts:
+                    for line in self.cycled_batts:
                         print "line =", line
                         print "tag_line =", tag_line
                         if line == tag_line:
@@ -297,7 +297,7 @@ class TagReader(threading.Thread):
                                     
                             # We're done recording the cycle, so
                             # remove it from the list
-                            cycled_batts.remove(line)
+                            self.cycled_batts.remove(line)
                             cycle_recorded = True
 
             else:
@@ -354,7 +354,7 @@ class TagReader(threading.Thread):
             if cycle_recorded:
                 try:
                     with open(self.cycled_file_path, 'w') as f:
-                        for line in cycled_batts:
+                        for line in self.cycled_batts:
                             f.write(line)
                 except:
                     print "Failed writing cycled_batteries file!"
@@ -371,10 +371,10 @@ class TagReader(threading.Thread):
         # Only allow cycles to be registered if the reader is stopped
         if self.status != RFIDTagOpStatus.Stopped:
             return { "status":self.status }
-        elif self.tags.tag_list.to_native() == []:
+        elif self.tags.tag_list == []:
             return { "status":RFIDTagOpStatus.Success }
         
-        cycled_batts = []
+        newly_cycled_batts = []
         new_cycles = False
         
         # Load the list of cycled batteries awaiting cycle count
@@ -382,7 +382,7 @@ class TagReader(threading.Thread):
         try:
             with open(self.cycled_file_path) as f:
                 for line in f:
-                    cycled_batts.append(line)
+                    newly_cycled_batts.append(line)
         except IOError as e:
             # If the file is missing, it's not an error
             if e.errno != errno.ENOENT:
@@ -393,19 +393,19 @@ class TagReader(threading.Thread):
             tag_line = "{0}, {1}\n".format(tag["battery_id"], \
                                            tag["tag_uid"])
             already_registered = False
-            for line in cycled_batts:
+            for line in newly_cycled_batts:
                 if line == tag_line:
                     already_registered = True
                     break
             if not already_registered:
-                cycled_batts.append(tag_line)
+                newly_cycled_batts.append(tag_line)
                 new_cycles = True
         
         # If the list changed, update the file
         if new_cycles:
             try:
                 with open(self.cycled_file_path, 'w') as f:
-                    for line in cycled_batts:
+                    for line in newly_cycled_batts:
                         f.write(line)
             except IOError as e:
                 return { "status":e.strerror }
