@@ -283,93 +283,98 @@ class TagReader(threading.Thread):
         tio = TagIO()
         
         while not self.loop_done:
-            cycle_recorded = False
-            tio.reset()
-            (type, uid) = tio.detect_tag()
-            if uid == None or uid == prev_uid:
-                continue
-            prev_uid = uid
+            try:  # Just to make sure we don't get stuck in case of an exception
+                cycle_recorded = False
+                tio.reset()
+                (type, uid) = tio.detect_tag()
+                if uid == None or uid == prev_uid:
+                    continue
+                prev_uid = uid
 
-            (schema, writable) = tio.get_schema(type)
-            if schema != None:
-                batt_dict = tio.read_tag(schema)
-                if batt_dict != None and writable:
-                    # Increment cycle count if needed
-                    tag_line = "{0}, {1}\n".format(batt_dict["battery_id"], \
-                                                   uid)
-                    for line in self.cycled_batts:
-                        print "line =", line
-                        print "tag_line =", tag_line
-                        if line == tag_line:
-                            # Increment the cycle count
-                            batt_dict[tio.CYCLES_KEY] += 1
-                            new_batt_dict = tio.write_tag(schema, batt_dict)
-                            if new_batt_dict != None:
-                                batt_dict = new_batt_dict
-                                    
-                            # We're done recording the cycle, so
-                            # remove it from the list
-                            self.cycled_batts.remove(line)
-                            cycle_recorded = True
-
-            else:
-                print "Invalid tag type: ", type
-                continue
-
-            # Check for already scanned and get the chemistry and cell count
-            chemistry = None
-            cells = None
-            for rfid_tag in self.tags.tag_list:
-                if (chemistry == None):
-                    chemistry = rfid_tag[tio.CHEMISTRY_KEY]
-                if (cells == None):
-                    cells = rfid_tag[tio.CELLS_KEY]
-                if rfid_tag[tio.BATTERY_ID_KEY] == \
-                                                 batt_dict[tio.BATTERY_ID_KEY] \
-                   and rfid_tag[tio.TAG_UID_KEY] == uid:
-                    chemistry = None
-                    cells = None
-                    # Let the user know the tag was recognized as valid but
-                    # already scanned
-                    LEDControl.flash(2, period=0.5)
-                    break
-                    
-            # Only allow the tag to be added to the list if:
-            # 1. The list is empty, or
-            # 2. The tag is not already in the list and the chemistry and
-            #    cell count in the new tag match that of the existing tags
-            if self.tags.tag_list == [] \
-               or (batt_dict[tio.CHEMISTRY_KEY] == chemistry \
-                   and batt_dict[tio.CELLS_KEY] == cells):
-                batt_dict[tio.TAG_UID_KEY] = uid
-                try:
-                    rfid_tag = RFIDTag(batt_dict)
-                    rfid_tag.validate()
-                except ModelValidationError as e:
-                    LEDControl.set_color(LEDControl.Red)
-                    time.sleep(2)
-                    LEDControl.set_color(LEDControl.Green)
-                    print "Data error in scanned tag info!"
-                    print e
-                    print "Tag ignored."
-                else:
-                    self.tags.tag_list.append(rfid_tag)
-                    LEDControl.flash(4)
-                    print "Tag added!"
-                    print rfid_tag[tio.BATTERY_ID_KEY], \
-                          rfid_tag[tio.TAG_UID_KEY]
-            elif chemistry != None:
-                # We'll flash at a little faster rate for anyone who is
-                # colorblind
-                LEDControl.flash(6, period=0.167, color1=LEDControl.Red)
-                
-            if cycle_recorded:
-                try:
-                    with open(self.cycled_file_path, 'w') as f:
+                (schema, writable) = tio.get_schema(type)
+                if schema != None:
+                    batt_dict = tio.read_tag(schema)
+                    if batt_dict != None and writable:
+                        # Increment cycle count if needed
+                        tag_line = "{0}, {1}\n".format(batt_dict["battery_id"],\
+                                                       uid)
                         for line in self.cycled_batts:
-                            f.write(line)
-                except:
-                    print "Failed writing cycled_batteries file!"
+                            print "line =", line
+                            print "tag_line =", tag_line
+                            if line == tag_line:
+                                # Increment the cycle count
+                                batt_dict[tio.CYCLES_KEY] += 1
+                                new_batt_dict = tio.write_tag(schema, batt_dict)
+                                if new_batt_dict != None:
+                                    batt_dict = new_batt_dict
+                                        
+                                # We're done recording the cycle, so
+                                # remove it from the list
+                                self.cycled_batts.remove(line)
+                                cycle_recorded = True
+
+                else:
+                    print "Invalid tag type: ", type
+                    continue
+
+                # Check for already scanned and get the chemistry and cell count
+                chemistry = None
+                cells = None
+                for rfid_tag in self.tags.tag_list:
+                    if (chemistry == None):
+                        chemistry = rfid_tag[tio.CHEMISTRY_KEY]
+                    if cells == None:
+                        cells = rfid_tag[tio.CELLS_KEY]
+                    print "rfid_tag =", rfid_tag
+                    print "batt_dict =", batt_dict
+                    if rfid_tag[tio.BATTERY_ID_KEY] == \
+                                                 batt_dict[tio.BATTERY_ID_KEY] \
+                       and rfid_tag[tio.TAG_UID_KEY] == uid:
+                        chemistry = None
+                        cells = None
+                        # Let the user know the tag was recognized as valid but
+                        # already scanned
+                        LEDControl.flash(2, period=0.5)
+                        break
+                        
+                # Only allow the tag to be added to the list if:
+                # 1. The list is empty, or
+                # 2. The tag is not already in the list and the chemistry and
+                #    cell count in the new tag match that of the existing tags
+                if self.tags.tag_list == [] \
+                   or (batt_dict[tio.CHEMISTRY_KEY] == chemistry \
+                       and batt_dict[tio.CELLS_KEY] == cells):
+                    batt_dict[tio.TAG_UID_KEY] = uid
+                    try:
+                        rfid_tag = RFIDTag(batt_dict)
+                        rfid_tag.validate()
+                    except ModelValidationError as e:
+                        LEDControl.set_color(LEDControl.Red)
+                        time.sleep(2)
+                        LEDControl.set_color(LEDControl.Green)
+                        print "Data error in scanned tag info!"
+                        print e
+                        print "Tag ignored."
+                    else:
+                        self.tags.tag_list.append(rfid_tag)
+                        LEDControl.flash(4)
+                        print "Tag added!"
+                        print rfid_tag[tio.BATTERY_ID_KEY], \
+                              rfid_tag[tio.TAG_UID_KEY]
+                elif chemistry != None:
+                    # We'll flash at a little faster rate for anyone who is
+                    # colorblind
+                    LEDControl.flash(6, period=0.167, color1=LEDControl.Red)
+                    
+                if cycle_recorded:
+                    try:
+                        with open(self.cycled_file_path, 'w') as f:
+                            for line in self.cycled_batts:
+                                f.write(line)
+                    except:
+                        print "Failed writing cycled_batteries file!"
+            except Exception as e:
+                print "Exception:", e.message
         LEDControl.cleanup()  # Cleans up the GPIO pins
         
     def stop(self):
@@ -482,44 +487,48 @@ class TagWriter(threading.Thread):
     def run(self):
         tio = TagIO()
         while not self.loop_done:
-            tio.reset()
-            (type, uid) = tio.detect_tag()
-            if uid == None:
-                continue
-
-            (schema, writable) = tio.get_schema(type)
-            if schema != None:
-                if not writable:
-                    self.status = RFIDTagOpStatus.ReadOnlyTag
-                    LEDControl.flash(6, period=0.167, color1=LEDColor.Red)
-                    # Lets keep going in case the wrong tag was touched
-                    #self.loop_done = true
-                    #break
+            try:  # Just to make sure we don't get stuck in case of an exception
+                tio.reset()
+                (type, uid) = tio.detect_tag()
+                if uid == None:
                     continue
-                if not self.force:
-                    batt_dict = tio.read_tag(schema)
-                    # Capacity should be 0 on a virgin tag
-                    if batt_dict[tio.CAPACITY_KEY] != 0:
-                        # Tag already written; must use force to overwrite
-                        self.status = RFIDTagOpStatus.UsedTag
-                        LEDControl.flash(6, period=0.167, color1=LEDControl.Red)
-                        # Let's keep going in case the wrong tag was touched
-                        #self.loop_done = True
+
+                (schema, writable) = tio.get_schema(type)
+                if schema != None:
+                    if not writable:
+                        self.status = RFIDTagOpStatus.ReadOnlyTag
+                        LEDControl.flash(6, period=0.167, color1=LEDColor.Red)
+                        # Lets keep going in case the wrong tag was touched
+                        #self.loop_done = true
                         #break
                         continue
-            else:
-                self.status = RFIDTagOpStatus.InvalidTag
-                self.loop_done = True
-                break
+                    if not self.force:
+                        batt_dict = tio.read_tag(schema)
+                        # Capacity should be 0 on a virgin tag
+                        if batt_dict[tio.CAPACITY_KEY] != 0:
+                            # Tag already written; must use force to overwrite
+                            self.status = RFIDTagOpStatus.UsedTag
+                            LEDControl.flash(6, period=0.167, \
+                                             color1=LEDControl.Red)
+                            # Let's keep going in case the wrong tag was touched
+                            #self.loop_done = True
+                            #break
+                            continue
+                else:
+                    self.status = RFIDTagOpStatus.InvalidTag
+                    self.loop_done = True
+                    break
 
-            if tio.write_tag(schema, self.rfid_tag.to_native()) == None:
-                self.status = RFIDTagOpStatus.Failed
-                LEDControl.set_color(LEDControl.Red)
-                time.sleep(2)
-            else:
-                self.status = RFIDTagOpStatus.Success
-                LEDControl.flash(4)
-            self.loop_done = True
+                if tio.write_tag(schema, self.rfid_tag.to_native()) == None:
+                    self.status = RFIDTagOpStatus.Failed
+                    LEDControl.set_color(LEDControl.Red)
+                    time.sleep(2)
+                else:
+                    self.status = RFIDTagOpStatus.Success
+                    LEDControl.flash(4)
+                self.loop_done = True
+            except Exception as e:
+                print "Exception:", e.message
         self.status = RFIDTagOpStatus.Stopped
         LEDControl.cleanup()  # Cleans up the GPIO pins
 
