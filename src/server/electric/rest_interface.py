@@ -198,7 +198,8 @@ class SystemStorageResource(Resource):
         system_json.update(connection_state_dict())
 
         capabilities = {
-            'case_fan': True
+            'case_fan': True,
+            'rfid':True
         }
         system_json['capabilities'] = capabilities
 
