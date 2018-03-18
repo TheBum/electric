@@ -30,6 +30,7 @@ class CaseFanControl:
 
         thresh = self.fan.threshold
         hyst = self.fan.hysteresis
+
         output_state = GPIO.input(self.fan_pin)
         if output_state == 0 and temp >= thresh:
             logger.info('Threshold: {0}, Hysteresis: {1}, Charger Temp: {2}, Turning case fan on'.format(thresh, hyst, temp))
@@ -37,6 +38,7 @@ class CaseFanControl:
         elif output_state == 1 and temp <= thresh - hyst:
             logger.info('Threshold: {0}, Hysteresis: {1}, Charger Temp: {2}, Turning case fan off'.format(thresh, hyst, temp))
             GPIO.output(self.fan_pin, GPIO.LOW)
+
         self.fan.running = (GPIO.input(self.fan_pin) == 1)
 
     def set_control_onoff(self, onoff):

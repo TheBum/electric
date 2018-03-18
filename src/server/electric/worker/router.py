@@ -61,14 +61,10 @@ def route_message(charger, method, args):
         return fan_controller.fan
     elif method == "set_case_fan_prefs":
         # Updates the state of the fan controller
-        if args.get('control'):
-            fan_controller.set_control_onoff(args.control)
-        if args.get('threshold'):
-            fan_controller.set_temp_threshold(args.threshold)
-        if args.get('hysteresis'):
-            fan_controller.set_temp_hysteresis(args.hysteresis)
-        if args.get('gpio'):
-            fan_controller.set_gpio_pin(args.gpio)
+        fan_controller.set_control_onoff(args.control)
+        fan_controller.set_temp_threshold(args.threshold)
+        fan_controller.set_temp_hysteresis(args.hysteresis)
+        fan_controller.set_gpio_pin(args.gpio)
         return fan_controller.save_prefs()
     # RFID tag methods
     elif method == "start_tag_reading":
